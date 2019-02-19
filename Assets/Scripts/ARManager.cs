@@ -15,7 +15,7 @@ namespace AR
 {
     public enum ARState
     {
-        None,
+        Off,
         Searching,
         Placing,
         Finalizing,
@@ -27,15 +27,15 @@ namespace AR
     /// </summary>
     public class ARManager : PersistentSingleton<ARManager>
     {
-        public ARState CurrentARState = ARState.None;
+        public ARState CurrentARState = ARState.Off;
 
         // Callbacks for when an event happens
-        public event Action OnARReady;
-        public event Action OnAROff;
-        public event Action OnSearching;
-        public event Action OnPlaneFound;
-        public event Action OnPlaced;
-        public event Action OnFinalized;
+        public event Action OnARReadyEvent;
+        public event Action OnOffEvent;
+        public event Action OnSearchingEvent;
+        public event Action OnPlaneFoundEvent;
+        public event Action OnFinalizedEvent;
+        public event Action OnDoneEvent;
 
         public bool ARSupported = false;
 
@@ -120,20 +120,7 @@ namespace AR
         {
             ARSubsystemManager.systemStateChanged += OnARSubsystemManager_SystemStateChanged;
 
-            _MainCamera = Camera.main;
-
-            _ARSession = GetComponentInChildren<ARSession>();
-            _ARSessionOrigin = GetComponentInChildren<ARSessionOrigin>();
-
-            _ARCamera = _ARSessionOrigin.transform.GetChild(0).GetComponent<Camera>();
-
-            _ARPointCloudManager = _ARSessionOrigin.GetComponent<ARPointCloudManager>();
-
-            _ARPointCloudManager.pointCloudUpdated += OnPointCloudUpdated;
-            _ARPointCloudManager.enabled = false;
-
-            _ARPlaneManager = _ARSessionOrigin.GetComponent<ARPlaneManager>();
-            _ARPlaneManager.enabled = false;
+            Initialize();
         }
 
         private void OnDisable()
@@ -165,8 +152,8 @@ namespace AR
                     ARSupported = true;
                     _ARCamera.enabled = false;
 
-                    if (OnARReady != null)
-                        OnARReady();
+                    if (OnARReadyEvent != null)
+                        OnARReadyEvent();
                 }
             }
         }
@@ -185,87 +172,48 @@ namespace AR
         #region // Methods
 
         /// <summary>
+        /// Initializes the manager
+        /// </summary>
+        private void Initialize()
+        {
+            _MainCamera = Camera.main;
+
+            _ARSession = GetComponentInChildren<ARSession>();
+            _ARSessionOrigin = GetComponentInChildren<ARSessionOrigin>();
+
+            _ARCamera = _ARSessionOrigin.transform.GetChild(0).GetComponent<Camera>();
+
+            _ARPointCloudManager = _ARSessionOrigin.GetComponent<ARPointCloudManager>();
+
+            _ARPointCloudManager.pointCloudUpdated += OnPointCloudUpdated;
+            _ARPointCloudManager.enabled = false;
+
+            _ARPlaneManager = _ARSessionOrigin.GetComponent<ARPlaneManager>();
+            _ARPlaneManager.enabled = false;
+        }
+
+        /// <summary>
         /// Sets AR on or off
         /// </summary>
-        /// <param name="state">If positive then AR is on. Negative is off</param>
-        public void ChangeARState(bool state)
+        public void SwitchAR()
         {
             _AROn = !_AROn;
 
             if (_AROn)
             {
-                SwitchAROn();
+                // Early exit if not supported
+                if (!ARSupported)
+                {
+                    _AROn = false;
+                    return;
+                }
+
+                SetARState(ARState.Searching);
             }
             else
             {
-                SwitchAROff();
+                SetARState(ARState.Off);
             }
-        }
-
-        /// <summary>
-        /// AR On method.
-        /// </summary>
-        private void SwitchAROn()
-        {
-            // Early exit if not supported
-            if (!ARSupported)
-            {
-                return;
-            }
-
-            _ARCamera.enabled = true;
-            _MainCamera.enabled = false;
-
-            ARSubsystemManager.DestroySubsystems();
-            ARSubsystemManager.CreateSubsystems();
-            ARSubsystemManager.StopSubsystems();
-            ARSubsystemManager.StartSubsystems();
-
-            _ARPointCloudManager.enabled = true;
-            _ARPlaneManager.enabled = true;
-
-            _PlaneCount = 0;
-
-            Scale = 10;
-
-            _ARSessionOrigin.MakeContentAppearAt(Center, new Vector3(99999, 99999, 99999), Rotation);
-
-            CurrentARState = ARState.Searching;
-
-            if (OnSearching != null)
-                OnSearching();
-
-            SetAllPlanesActive(true);
-        }
-
-        /// <summary>
-        /// AR Off method.
-        /// </summary>
-        private void SwitchAROff()
-        {
-            _ARCamera.enabled = false;
-            _MainCamera.enabled = true;
-
-            _ARPointCloudManager.enabled = false;
-            _ARPlaneManager.enabled = false;
-
-            CurrentARState = ARState.None;
-
-            if (OnAROff != null)
-                OnAROff();
-
-            SetAllPlanesActive(false);
-        }
-
-        /// <summary>
-        /// Sets all AR planes active or inactive
-        /// </summary>
-        /// <param name="value">Controls if AR planes are on or off</param>
-        private void SetAllPlanesActive(bool value)
-        {
-            _ARPlaneManager.GetAllPlanes(_Planes);
-            foreach (var plane in _Planes)
-                plane.gameObject.SetActive(value);
         }
 
         /// <summary>
@@ -281,20 +229,30 @@ namespace AR
                 return;
             }
 
-            switch (CurrentARState)
+            switch (newARState)
             {
-                case ARState.Searching:
+                case ARState.Off:
+                    SetOff();
+                    break;
 
+                case ARState.Searching:
+                    SetSearching();
                     break;
 
                 case ARState.Placing:
-
+                    SetPlacing();
                     break;
 
                 case ARState.Finalizing:
+                    SetFinalizing();
+                    break;
 
+                case ARState.Done:
+                    SetDone();
                     break;
             }
+
+            CurrentARState = newARState;
         }
 
         /// <summary>
@@ -319,18 +277,81 @@ namespace AR
         }
 
         /// <summary>
+        /// Set None state
+        /// </summary>
+        private void SetOff()
+        {
+            _ARCamera.enabled = false;
+            _MainCamera.enabled = true;
+
+            _ARPointCloudManager.enabled = false;
+            _ARPlaneManager.enabled = false;
+
+            CurrentARState = ARState.Off;
+
+            if (OnOffEvent != null)
+                OnOffEvent();
+
+            foreach (ARPointCloud arPC in _ARPointClouds)
+            {
+                if (arPC != null)
+                    Destroy(arPC.gameObject);
+            }
+
+            _ARPointClouds.Clear();
+
+            SetAllPlanesActive(false);
+        }
+
+        /// <summary>
+        /// Set Searching state
+        /// </summary>
+        private void SetSearching()
+        {
+            _ARCamera.enabled = true;
+            _MainCamera.enabled = false;
+
+            ARSubsystemManager.DestroySubsystems();
+            ARSubsystemManager.CreateSubsystems();
+            ARSubsystemManager.StopSubsystems();
+            ARSubsystemManager.StartSubsystems();
+
+            _ARPointCloudManager.enabled = true;
+            _ARPlaneManager.enabled = true;
+
+            SetAllPlanesActive(true);
+
+            _PlaneCount = 0;
+
+            Scale = 10;
+
+            Rotation = Quaternion.identity;
+
+            _ARSessionOrigin.MakeContentAppearAt(Center, new Vector3(99999, 99999, 99999), Rotation);
+
+            if (OnSearchingEvent != null)
+                OnSearchingEvent();
+        }
+
+        /// <summary>
         /// Searching state
         /// </summary>
         private void UpdateSearching()
         {
             if (_ARPlaneManager.planeCount != _PlaneCount)
             {
-                if (OnPlaneFound != null)
-                {
-                    OnPlaneFound();
-                }
+               SetARState(ARState.Placing);
+            }
+        }
 
-               CurrentARState = ARState.Placing;
+        /// <summary>
+        /// Set Placing state
+        /// </summary>
+        private void SetPlacing()
+        {
+            if (OnPlaneFoundEvent != null)
+            {
+                OnPlaneFoundEvent();
             }
         }
 
@@ -354,13 +375,19 @@ namespace AR
                 // such that the content appears to be at the raycast hit position.
                 _ARSessionOrigin.MakeContentAppearAt(Center, hitPose.position, Rotation);
 
-                if (OnPlaced != null)
-                {
-                    OnPlaced();
-                }
-
                 // AR placed so change to Finalizing
-                CurrentARState = ARState.Finalizing;
+                SetARState(ARState.Finalizing);
+            }
+        }
+
+        /// <summary>
+        /// Set Finalizing state
+        /// </summary>
+        private void SetFinalizing()
+        {
+            if (OnFinalizedEvent != null)
+            {
+                OnFinalizedEvent();
             }
         }
 
@@ -383,12 +410,7 @@ namespace AR
                 _DoubleTapTimer = 0.0f;
                 _TapCount = 0;
 
-                if (OnFinalized != null)
-                {
-                    OnFinalized();
-                }
-
-                Done();
+                SetARState(ARState.Done);
             }
             if (_DoubleTapTimer > 0.5f)
             {
@@ -400,8 +422,13 @@ namespace AR
         /// <summary>
         /// Done state. Disables all AR point clouds and planes.
         /// </summary>
-        private void Done()
+        private void SetDone()
         {
+            if (OnDoneEvent != null)
+            {
+                OnDoneEvent();
+            }
+
             _ARPlaneManager.enabled = false;
             _ARPointCloudManager.enabled = false;
 
@@ -414,8 +441,17 @@ namespace AR
             _ARPointClouds.Clear();
 
             SetAllPlanesActive(false);
+        }
 
-            CurrentARState = ARState.Done;
+        /// <summary>
+        /// Sets all AR planes active or inactive
+        /// </summary>
+        /// <param name="value">Controls if AR planes are on or off</param>
+        private void SetAllPlanesActive(bool value)
+        {
+            _ARPlaneManager.GetAllPlanes(_Planes);
+            foreach (var plane in _Planes)
+                plane.gameObject.SetActive(value);
         }
         #endregion
     }

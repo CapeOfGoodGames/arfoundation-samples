@@ -28,12 +28,12 @@ public class ARTester : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        ARManager.Instance.OnARReady += Instance_OnARReady;
-        ARManager.Instance.OnAROff += Instance_OnAROff;
-        ARManager.Instance.OnSearching += Instance_OnSearching;
-        ARManager.Instance.OnPlaneFound += Instance_OnPlaneFound;
-        ARManager.Instance.OnPlaced += Instance_OnPlaced;
-        ARManager.Instance.OnFinalized += Instance_OnFinalized;
+        ARManager.Instance.OnARReadyEvent += Instance_OnARReady;
+        ARManager.Instance.OnOffEvent += Instance_OnOff;
+        ARManager.Instance.OnSearchingEvent += Instance_OnSearching;
+        ARManager.Instance.OnPlaneFoundEvent += Instance_OnPlaneFound;
+        ARManager.Instance.OnFinalizedEvent += Instance_OnFinalized;
+        ARManager.Instance.OnDoneEvent += Instance_OnDone;
 
         ARButton.SetActive(false);
         ARButtonText.text = ARManager.Instance.AROn == true ? "AR ON" : "AR OFF";
@@ -41,12 +41,12 @@ public class ARTester : MonoBehaviour
 
     private void OnDisable()
     {
-        ARManager.Instance.OnARReady -= Instance_OnARReady;
-        ARManager.Instance.OnAROff -= Instance_OnAROff;
-        ARManager.Instance.OnSearching -= Instance_OnSearching;
-        ARManager.Instance.OnPlaneFound -= Instance_OnPlaneFound;
-        ARManager.Instance.OnPlaced -= Instance_OnPlaced;
-        ARManager.Instance.OnFinalized -= Instance_OnFinalized;
+        ARManager.Instance.OnARReadyEvent -= Instance_OnARReady;
+        ARManager.Instance.OnOffEvent -= Instance_OnOff;
+        ARManager.Instance.OnSearchingEvent -= Instance_OnSearching;
+        ARManager.Instance.OnPlaneFoundEvent -= Instance_OnPlaneFound;
+        ARManager.Instance.OnFinalizedEvent -= Instance_OnFinalized;
+        ARManager.Instance.OnDoneEvent -= Instance_OnDone;
     }
 
     void Instance_OnARReady()
@@ -54,7 +54,7 @@ public class ARTester : MonoBehaviour
         ARButton.SetActive(true);
     }
 
-    void Instance_OnAROff()
+    void Instance_OnOff()
     {
         FinalizingPanel.SetActive(false);
 
@@ -63,6 +63,8 @@ public class ARTester : MonoBehaviour
 
     void Instance_OnSearching()
     {
+        _ScaleValue = ARManager.Instance.Scale;
+
         FinalizingPanel.SetActive(false);
 
         ARStatusText.text = "Searching";
@@ -73,14 +75,14 @@ public class ARTester : MonoBehaviour
         ARStatusText.text = "Tap To Place";
     }
 
-    void Instance_OnPlaced()
+    void Instance_OnFinalized()
     {
         FinalizingPanel.SetActive(true);
 
         ARStatusText.text = "Double Tap To Finish";
     }
 
-    void Instance_OnFinalized()
+    void Instance_OnDone()
     {
         FinalizingPanel.SetActive(false);
 
@@ -89,7 +91,7 @@ public class ARTester : MonoBehaviour
 
     public void SwitchAR()
     {
-        ARManager.Instance.ChangeARState(!ARManager.Instance.AROn);
+        ARManager.Instance.SwitchAR();
 
         ARButtonText.text = ARManager.Instance.AROn == true ? "AR ON" : "AR OFF";
     
@@ -103,7 +105,7 @@ public class ARTester : MonoBehaviour
     {
         if (_RotationDir != 0)
         {
-            _RotationValue += 10 * _RotationDir * Time.deltaTime;
+            _RotationValue += 30 * _RotationDir * Time.deltaTime;
 
             if (_RotationValue < 0)
             {
