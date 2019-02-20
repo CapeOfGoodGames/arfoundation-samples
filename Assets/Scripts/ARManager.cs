@@ -182,6 +182,8 @@ namespace AR
             _ARSessionOrigin = GetComponentInChildren<ARSessionOrigin>();
 
             _ARCamera = _ARSessionOrigin.transform.GetChild(0).GetComponent<Camera>();
+            _ARCamera.GetComponent<AudioListener>().enabled = false;
+            _ARCamera.enabled = false;
 
             _ARPointCloudManager = _ARSessionOrigin.GetComponent<ARPointCloudManager>();
 
@@ -282,7 +284,9 @@ namespace AR
         private void SetOff()
         {
             _ARCamera.enabled = false;
+            _ARCamera.GetComponent<AudioListener>().enabled = false;
             _MainCamera.enabled = true;
+            _MainCamera.GetComponent<AudioListener>().enabled = true;
 
             _ARPointCloudManager.enabled = false;
             _ARPlaneManager.enabled = false;
@@ -309,7 +313,9 @@ namespace AR
         private void SetSearching()
         {
             _ARCamera.enabled = true;
+            _ARCamera.GetComponent<AudioListener>().enabled = true;
             _MainCamera.enabled = false;
+            _MainCamera.GetComponent<AudioListener>().enabled = false;
 
             ARSubsystemManager.DestroySubsystems();
             ARSubsystemManager.CreateSubsystems();
